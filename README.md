@@ -35,22 +35,51 @@ show *how* the LoRA efficiency/quality tradeoff actually moves as `r` changes.
 
 ## Results
 
-_Run `kaggle/finetune_comparison.ipynb` to regenerate
-`results/comparison.csv` and `results/lora_rank_sweep.csv`, then fill in:_
+Trained on a 1000-example subset of DialogSum, 1 epoch, evaluated on 50
+held-out test dialogues (`google/flan-t5-base`, single T4 GPU):
 
 | Model | Trainable % | Train time (s) | ROUGE-1 | ROUGE-2 | ROUGE-L |
 |---|---|---|---|---|---|
-| original (zero-shot) | 0% | 0 | | | |
-| full fine-tune | 100% | | | | |
-| LoRA fine-tune (r=32) | | | | | |
+| original (zero-shot) | 0% | 0 | 0.215 | 0.053 | 0.190 |
+| full fine-tune | 100% | 735.0 | 0.339 | 0.086 | 0.269 |
+| LoRA fine-tune (r=32) | 1.41% | 81.9 | 0.372 | 0.108 | 0.301 |
 
 ### LoRA rank sweep
 
-| r | Trainable params | Trainable % | ROUGE-L |
-|---|---|---|---|
-| 4 | | | |
-| 16 | | | |
-| 32 | | | |
+| r | Trainable params | Trainable % | Train time (s) | ROUGE-1 | ROUGE-2 | ROUGE-L |
+|---|---|---|---|---|---|---|
+| 4  | 442,368   | 0.178% | 82.6 | 0.369 | 0.124 | 0.298 |
+| 16 | 1,769,472 | 0.710% | 82.6 | 0.350 | 0.118 | 0.295 |
+| 32 | 3,538,944 | 1.409% | 82.7 | 0.372 | 0.108 | 0.301 |
+
+### Findings
+
+- **LoRA didn't just approach full fine-tuning here — it beat it.** At
+  r=32, LoRA reaches ROUGE-L 0.301 vs. full fine-tuning's 0.269, while
+  training on **1.41% of the parameters** in **9x less wall-clock time**
+  (81.9s vs. 735.0s for the same 1000 examples, 1 epoch). This is a smaller,
+  short training run (1 epoch, 1000 examples), so it's plausible the full
+  fine-tune is under-trained relative to its much larger effective capacity
+  and would close the gap with more epochs or a larger learning-rate
+  schedule tuned specifically for it — the comparison here holds
+  hyperparameter budget roughly constant across methods rather than tuning
+  each separately.
+- **Both fine-tuning approaches clear zero-shot by a wide margin.**
+  ROUGE-L roughly +0.08 (full FT) to +0.11 (LoRA) over the untouched base
+  model — fine-tuning on in-domain data matters much more than which
+  fine-tuning method is used, at this scale.
+- **LoRA rank barely matters in this setup.** ROUGE-L is nearly flat from
+  r=4 (0.298) to r=32 (0.301), and r=16 is actually the low point (0.295).
+  With only ~430K–3.5M trainable parameters either way (well under 1.5% of
+  the model), all three ranks likely have enough capacity to fit a
+  1000-example training set — the bottleneck is the small data/epoch budget,
+  not adapter capacity. r=4 is the practical pick here: same quality as
+  r=32 at 8x fewer trainable parameters.
+- **Training time is essentially identical across LoRA ranks** (~82.6s
+  regardless of r=4 vs r=32), because at this scale the fixed cost of a
+  forward/backward pass through the frozen 250M-parameter base dominates —
+  the adapter's own parameter count is too small to move the needle on
+  wall-clock time.
 
 ## Repository structure
 

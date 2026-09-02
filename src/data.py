@@ -20,20 +20,16 @@ def build_prompt(dialogue: str) -> str:
 def tokenize_dataset(dataset, tokenizer, max_length: int = 512):
     """Tokenize dialogue -> input_ids and summary -> labels for every split.
 
-    Truncates/pads to `max_length`. Returns a DatasetDict with the original
-    text columns removed, ready to hand to a Hugging Face Trainer.
+    Truncates (but does not pad) to `max_length`; padding is left to a
+    dynamic data collator at training time so batches only pad to the
+    longest sequence in that batch, not to a fixed 512 for every example.
+    Returns a DatasetDict with the original text columns removed.
     """
 
     def _tokenize(example):
         prompts = [build_prompt(d) for d in example["dialogue"]]
-        model_inputs = tokenizer(
-            prompts, padding="max_length", truncation=True,
-            max_length=max_length, return_tensors="pt",
-        )
-        labels = tokenizer(
-            example["summary"], padding="max_length", truncation=True,
-            max_length=max_length, return_tensors="pt",
-        )
+        model_inputs = tokenizer(prompts, truncation=True, max_length=max_length)
+        labels = tokenizer(example["summary"], truncation=True, max_length=max_length)
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
 
